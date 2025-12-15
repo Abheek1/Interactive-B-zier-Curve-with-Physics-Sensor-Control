@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interactive Bézier Rope</title>
+<style>
+  body { margin: 0; background: #0b0b0b; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* ============================
+   Vector Helpers
+============================ */
+class Vec2 {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+  add(v) { return new Vec2(this.x + v.x, this.y + v.y); }
+  sub(v) { return new Vec2(this.x - v.x, this.y - v.y); }
+  scale(s) { return new Vec2(this.x * s, this.y * s); }
+  length() { return Math.hypot(this.x, this.y); }
+  normalize() {
+    const len = this.length() || 1;
+    return new Vec2(this.x / len, this.y / len);
+  }
+}
+
+/* ============================
+   Control Points
+============================ */
+const P0 = new Vec2(150, canvas.height / 2);
+const P3 = new Vec2(canvas.width - 150, canvas.height / 2);
+
+const P1 = {
+  pos: new Vec2(300, canvas.height / 2 - 100),
+  vel: new Vec2(0, 0),
+  target: new Vec2(300, canvas.height / 2 - 100)
+};
+
+const P2 = {
+  pos: new Vec2(canvas.width - 300, canvas.height / 2 + 100),
+  vel: new Vec2(0, 0),
+  target: new Vec2(canvas.width - 300, canvas.height / 2 + 100)
+};
+
+const stiffness = 0.02;
+const damping = 0.85;
+
+/* ============================
+   Input (Mouse)
+============================ */
+canvas.addEventListener("mousemove", e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  P1.target = new Vec2(mx, my);
+  P2.target = new Vec2(
+    canvas.width - mx,
+    canvas.height - my
+  );
+});
+
+/* ============================
+   Physics Update
+============================ */
+function updateSpring(point) {
+  const force = point.pos.sub(point.target).scale(-stiffness);
+  point.vel = point.vel.add(force);
+  point.vel = point.vel.scale(damping);
+  point.pos = point.pos.add(point.vel);
+}
+
+/* ============================
+   Bézier Math
+============================ */
+function bezier(t, p0, p1, p2, p3) {
+  const u = 1 - t;
+  const tt = t * t;
+  const uu = u * u;
+
+  return p0.scale(uu * u)
+    .add(p1.scale(3 * uu * t))
+    .add(p2.scale(3 * u * tt))
+    .add(p3.scale(tt * t));
+}
+
+function bezierTangent(t, p0, p1, p2, p3) {
+  const u = 1 - t;
+  return p1.sub(p0).scale(3 * u * u)
+    .add(p2.sub(p1).scale(6 * u * t))
+    .add(p3.sub(p2).scale(3 * t * t));
+}
+
+/* ============================
+   Rendering
+============================ */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Curve
+  ctx.beginPath();
+  for (let t = 0; t <= 1; t += 0.01) {
+    const p = bezier(t, P0, P1.pos, P2.pos, P3);
+    t === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+  }
+  ctx.strokeStyle = "#00ffd5";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Tangents
+  for (let t = 0; t <= 1; t += 0.1) {
+    const p = bezier(t, P0, P1.pos, P2.pos, P3);
+    const tan = bezierTangent(t, P0, P1.pos, P2.pos, P3)
+                  .normalize()
+                  .scale(30);
+
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + tan.x, p.y + tan.y);
+    ctx.strokeStyle = "#ff6a00";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Control Points
+  drawPoint(P0, "#fff");
+  drawPoint(P1.pos, "#ff0000");
+  drawPoint(P2.pos, "#ff0000");
+  drawPoint(P3, "#fff");
+}
+
+function drawPoint(p, color) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/* ============================
+   Animation Loop
+============================ */
+function loop() {
+  updateSpring(P1);
+  updateSpring(P2);
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
